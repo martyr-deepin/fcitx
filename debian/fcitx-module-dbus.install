@@ -1,5 +1,0 @@
-usr/lib/*/fcitx/fcitx-dbus.so
-usr/share/fcitx/addon/fcitx-dbus.conf
-usr/lib/*/fcitx/fcitx-ipc.so
-usr/share/fcitx/addon/fcitx-ipc.conf
-usr/share/fcitx/dbus/daemon.conf
