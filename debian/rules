@@ -1,0 +1,32 @@
+#!/usr/bin/make -f
+include debian/variables.mk
+include debian/gencontrol.mk
+%:
+	dh $@ --with gir
+override_dh_auto_clean: gen_control
+	dh_auto_clean
+override_dh_auto_configure: gen_control
+	dh_auto_configure -- \
+	    -DCMAKE_BUILD_TYPE=Release \
+	    -DLIB_INSTALL_DIR=/usr/lib/$(DEB_HOST_MULTIARCH) \
+	    -DENABLE_CAIRO=ON \
+	    -DENABLE_DBUS=ON \
+	    -DENABLE_PANGO=ON \
+	    -DENABLE_TABLE=ON \
+	    -DENABLE_GTK2_IM_MODULE=ON \
+	    -DENABLE_GTK3_IM_MODULE=ON \
+	    -DENABLE_QT_IM_MODULE=ON \
+	    -DENABLE_OPENCC=ON \
+	    -DENABLE_LUA=ON \
+	    -DENABLE_STATIC=ON \
+	    -DENABLE_TEST=ON \
+	    -DENABLE_SNOOPER=ON \
+	    -DENABLE_GIR=ON
+override_dh_install:
+	dh_install --fail-missing
+override_dh_makeshlibs:
+	dh_makeshlibs -pfcitx-libs
+	dh_makeshlibs -pfcitx-libs-gclient
+	dh_makeshlibs -pfcitx-libs-qt
+override_dh_strip:
+	dh_strip --dbg-package=fcitx-dbg

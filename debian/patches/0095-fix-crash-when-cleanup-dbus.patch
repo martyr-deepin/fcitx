@@ -1,0 +1,189 @@
+diff --git a/src/module/dbus/dbusremote.c b/src/module/dbus/dbusremote.c
+index f824792..e99abb4 100644
+--- a/src/module/dbus/dbusremote.c
++++ b/src/module/dbus/dbusremote.c
+@@ -31,11 +31,9 @@ _fcitx_get_socket_path()
+ static char*
+ _fcitx_get_address ()
+ {
+-    char* address = NULL;
+-    char* env = getenv("FCITX_DBUS_ADDRESS");
+-    address = env ? strdup (env) : NULL;
+-    if (address)
+-        return address;
++    char *env = getenv("FCITX_DBUS_ADDRESS");
++    if (env)
++        return strdup(env);
+ 
+     char* path = _fcitx_get_socket_path();
+     FILE* fp = fopen(path, "r");
+@@ -62,10 +60,7 @@ _fcitx_get_address ()
+     if (!fcitx_utils_pid_exists(daemonpid)
+         || !fcitx_utils_pid_exists(fcitxpid))
+         return NULL;
+-
+-    address = strdup(buffer);
+-
+-    return address;
++    return strdup(buffer);
+ }
+ 
+ void usage(FILE* fp)
+@@ -142,19 +137,17 @@ int main (int argc, char* argv[])
+             address = _fcitx_get_address();
+             if (address) {
+                 printf("%s\n", address);
++                free(address);
+                 return 0;
+-            }
+-            else
++            } else {
+                 return 1;
+-            break;
+-
++            }
+         case 'h':
+             usage(stdout);
+             return 0;
+         default:
+             usage(stderr);
+             return 1;
+-            break;
+         }
+     }
+ 
+diff --git a/src/module/dbus/dbussocket.c b/src/module/dbus/dbussocket.c
+index 3dbf622..eaa5a25 100644
+--- a/src/module/dbus/dbussocket.c
++++ b/src/module/dbus/dbussocket.c
+@@ -6,9 +6,11 @@ dbus_bool_t DBusAddWatch(DBusWatch *watch, void *data)
+     FcitxDBusWatch *w;
+     FcitxDBusWatch **watches = (FcitxDBusWatch**) data;
+ 
+-    for (w = *watches; w; w = w->next)
+-        if (w->watch == watch)
++    for (w = *watches; w; w = w->next) {
++        if (w->watch == watch) {
+             return TRUE;
++        }
++    }
+ 
+     if (!(w = fcitx_utils_new(FcitxDBusWatch)))
+         return FALSE;
+@@ -21,15 +23,23 @@ dbus_bool_t DBusAddWatch(DBusWatch *watch, void *data)
+ 
+ void DBusRemoveWatch(DBusWatch *watch, void *data)
+ {
+-    FcitxDBusWatch **up, *w;
+-    FcitxDBusWatch **watches = (FcitxDBusWatch**) data;
++    FcitxDBusWatch *w;
++    FcitxDBusWatch *next, *prev;
++    FcitxDBusWatch **watches = (FcitxDBusWatch**)data;
+ 
+-    for (up = watches, w = *watches; w; w = w->next) {
++    prev = NULL;
++    for (w = *watches;w;w = next) {
++        next = w->next;
+         if (w->watch == watch) {
+-            *up = w->next;
+             free(w);
+-        } else
+-            up = &(w->next);
++            if (prev) {
++                prev->next = next;
++            } else {
++                *watches = next;
++            }
++        } else {
++            prev = w;
++        }
+     }
+ }
+ 
+diff --git a/src/module/dbus/dbussocket.h b/src/module/dbus/dbussocket.h
+index 84019fd..e0fb975 100644
+--- a/src/module/dbus/dbussocket.h
++++ b/src/module/dbus/dbussocket.h
+@@ -1,5 +1,28 @@
+-#include <dbus/dbus.h>
++/***************************************************************************
++ *   Copyright (C) 2012~2013 by CSSlayer                                   *
++ *   wengxt@gmail.com                                                      *
++ *                                                                         *
++ *   This program is free software; you can redistribute it and/or modify  *
++ *   it under the terms of the GNU General Public License as published by  *
++ *   the Free Software Foundation; either version 2 of the License, or     *
++ *   (at your option) any later version.                                   *
++ *                                                                         *
++ *   This program is distributed in the hope that it will be useful,       *
++ *   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
++ *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
++ *   GNU General Public License for more details.                          *
++ *                                                                         *
++ *   You should have received a copy of the GNU General Public License     *
++ *   along with this program; if not, write to the                         *
++ *   Free Software Foundation, Inc.,                                       *
++ *   51 Franklin St, Fifth Floor, Boston, MA 02110-1301, USA.              *
++ ***************************************************************************/
++
++#ifndef _FCITX_DBUSSOCKET_H
++#define _FCITX_DBUSSOCKET_H
++
+ #include <sys/select.h>
++#include <dbus/dbus.h>
+ 
+ typedef struct _FcitxDBusWatch {
+     DBusWatch *watch;
+@@ -11,3 +34,6 @@ void DBusRemoveWatch(DBusWatch *watch, void *data);
+ int DBusUpdateFDSet(FcitxDBusWatch* watches, fd_set* rfds, fd_set* wfds, fd_set* efds);
+ void DBusProcessEventForWatches(FcitxDBusWatch* watches, fd_set* rfds, fd_set* wfds, fd_set* efds);
+ void DBusProcessEventForConnection(DBusConnection* connection);
++
++#endif // _FCITX_DBUSSOCKET_H
++
+diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
+index 5f79408..8b71c99 100644
+--- a/test/CMakeLists.txt
++++ b/test/CMakeLists.txt
+@@ -54,6 +54,16 @@ add_executable(testdbuslaunch testdbuslaunch.c
+                ../src/module/dbus/dbuslauncher.c
+                )
+ 
++if(_ENABLE_DBUS)
++  include_directories(${DBUS_INCLUDE_DIRS})
++  link_directories(${DBUS_LIBRARY_DIRS})
++  add_executable(testdbussocket testdbussocket.c
++                 ../src/module/dbus/dbussocket.c)
++  target_link_libraries(testdbussocket ${DBUS_LIBRARIES} fcitx-utils)
++  add_test(NAME testdbussocket COMMAND testdbussocket)
++endif()
++
++
+ target_link_libraries(testdbuslaunch fcitx-utils)
+ 
+ add_test(NAME testconfig
+diff --git a/test/testdbussocket.c b/test/testdbussocket.c
+new file mode 100644
+index 0000000..3149c6f
+--- /dev/null
++++ b/test/testdbussocket.c
+@@ -0,0 +1,19 @@
++#include <assert.h>
++#include <stdlib.h>
++
++#define _FCITX_TEST
++
++#include "dbussocket.h"
++
++int main()
++{
++    FcitxDBusWatch* watches = NULL;
++    DBusAddWatch((void *)0x1, &watches);
++    DBusRemoveWatch((void *)0x1, &watches);
++
++    assert(watches == NULL);
++    DBusRemoveWatch((void *)0x1, &watches);
++
++    assert(watches == NULL);
++    return 0;
++}

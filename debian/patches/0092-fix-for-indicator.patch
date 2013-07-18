@@ -1,0 +1,134 @@
+--- a/src/module/notificationitem/dbusmenu.c
++++ b/src/module/notificationitem/dbusmenu.c
+@@ -517,7 +517,22 @@
+                     for (menupp = (FcitxUIMenu **) utarray_front(uimenus);
+                          menupp != NULL;
+                          menupp = (FcitxUIMenu **) utarray_next(uimenus, menupp)) {
+-                        FcitxDBusMenuFillLayooutItemWrap(notificationitem, ACTION_ID(i,0), depth - 1, properties, &array);
++                        do {
++                            if (!menupp) {
++                                break;
++                            }
++                            FcitxUIMenu* menup = *menupp;
++                            if (!menup->visible) {
++                                break;
++                            }
++                            if (menup->candStatusBind) {
++                                FcitxUIComplexStatus* compStatus = FcitxUIGetComplexStatusByName(instance, menup->candStatusBind);
++                                if (compStatus && !compStatus->visible) {
++                                    break;
++                                }
++                            }
++                            FcitxDBusMenuFillLayooutItemWrap(notificationitem, ACTION_ID(i,0), depth - 1, properties, &array);
++                        } while(0);
+                         i ++;
+                     }
+                     FcitxDBusMenuFillLayooutItemWrap(notificationitem, ACTION_ID(0,3), depth - 1, properties, &array);
+--- a/src/ui/classic/MenuWindow.c
++++ b/src/ui/classic/MenuWindow.c
+@@ -38,7 +38,7 @@
+ 
+ static boolean ReverseColor(XlibMenu * Menu, int shellIndex);
+ static void MenuMark(XlibMenu* menu, int y, int i);
+-static void DrawArrow(XlibMenu* menu, int line_y);
++static void DrawArrow(XlibMenu* menu, int line_y, int i);
+ static void MoveSubMenu(XlibMenu *sub, XlibMenu *parent, int offseth);
+ static void DisplayText(XlibMenu* menu, int shellindex, int line_y, int fontHeight);
+ static void DrawDivLine(XlibMenu * menu, int line_y);
+@@ -330,7 +330,7 @@
+                 MenuMark(menu, iPosY, i);
+ 
+             if (GetMenuItem(menu->menushell, i)->type == MENUTYPE_SUBMENU)
+-                DrawArrow(menu, iPosY);
++                DrawArrow(menu, iPosY, i);
+             iPosY = iPosY + 6 + fontheight;
+         } else if (GetMenuItem(menu->menushell, i)->type == MENUTYPE_DIVLINE) {
+             DrawDivLine(menu, iPosY);
+@@ -424,13 +424,18 @@
+     cairo_destroy(cr);
+ }
+ 
+-void DrawArrow(XlibMenu *menu, int line_y)
++void DrawArrow(XlibMenu* menu, int line_y, int i)
+ {
+     FcitxSkin *sc = &menu->owner->skin;
+     int marginRight = sc->skinMenu.marginRight;
+     cairo_t* cr = cairo_create(menu->menu_cs);
+     double size = sc->skinFont.menuFontSize * 0.4;
+     double offset = (sc->skinFont.menuFontSize - size) / 2;
++    if (GetMenuItem(menu->menushell, i)->isselect == 0) {
++        fcitx_cairo_set_color(cr, &sc->skinFont.menuFontColor[MENU_INACTIVE]);
++    } else {
++        fcitx_cairo_set_color(cr, &sc->skinFont.menuFontColor[MENU_ACTIVE]);
++    }
+     cairo_move_to(cr, menu->width - marginRight - 1 - size, line_y + offset);
+     cairo_line_to(cr, menu->width - marginRight - 1 - size, line_y + size * 2 + offset);
+     cairo_line_to(cr, menu->width - marginRight - 1, line_y + size + offset);
+--- a/src/ui/classic/TrayWindow.c
++++ b/src/ui/classic/TrayWindow.c
+@@ -131,14 +131,15 @@
+     if (!classicui->bUseTrayIcon)
+         return;
+ 
++    if (!trayWindow->bTrayMapped)
++        return;
++
+     if (FcitxInstanceGetCurrentState(classicui->owner) == IS_ACTIVE)
+         f_state = ACTIVE_ICON;
+     else
+         f_state = INACTIVE_ICON;
+     cairo_t *c;
+-    cairo_surface_t *png_surface ;
+-    if (!trayWindow->bTrayMapped)
+-        return;
++    cairo_surface_t *png_surface;
+ 
+     /* 画png */
+     if (f_state) {
+@@ -219,6 +220,8 @@
+     case ClientMessage:
+         if (event->xclient.message_type == trayWindow->atoms[ATOM_MANAGER]
+                 && event->xclient.data.l[1] == trayWindow->atoms[ATOM_SELECTION]) {
++            if (classicui->notificationItemAvailable)
++                return true;
+             if (trayWindow->window == None)
+                 InitTrayWindow(trayWindow);
+             TrayFindDock(dpy, trayWindow);
+--- a/src/ui/classic/classicui.c
++++ b/src/ui/classic/classicui.c
+@@ -292,6 +292,7 @@
+ {
+     FcitxClassicUI* classicui = (FcitxClassicUI*) arg;
+     classicui->isSuspend = true;
++    classicui->notificationItemAvailable = false;
+     CloseInputWindowInternal(classicui->inputWindow);
+     CloseMainWindow(classicui->mainWindow);
+     ReleaseTrayWindow(classicui->trayWindow);
+@@ -311,6 +312,7 @@
+     /* ClassicUISuspend has already done all clean up */
+     if (classicui->isSuspend)
+         return;
++    classicui->notificationItemAvailable = avaiable;
+     if (!avaiable) {
+         ReleaseTrayWindow(classicui->trayWindow);
+         InitTrayWindow(classicui->trayWindow);
+--- a/src/ui/classic/classicui.h
++++ b/src/ui/classic/classicui.h
+@@ -85,6 +85,7 @@
+ 
+     int dpi;
+     uint64_t trayTimeout;
++    boolean notificationItemAvailable;
+ } FcitxClassicUI;
+ 
+ void GetScreenSize(FcitxClassicUI* classicui, int* width, int* height);
+--- a/src/ui/classic/tray.h
++++ b/src/ui/classic/tray.h
+@@ -28,7 +28,6 @@
+ #include "TrayWindow.h"
+ 
+ int InitTray(Display* dpy, TrayWindow* win);
+-void TrayHandleClientMessage(Display *dpy, Window win, XEvent *an_event);
+ int TrayFindDock(Display *dpy, TrayWindow* tray);
+ XVisualInfo* TrayGetVisual(Display* dpy, TrayWindow* tray);
+ Window TrayGetDock(Display* dpy, TrayWindow* tray);

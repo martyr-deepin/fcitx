@@ -1,0 +1,7 @@
+--- a/src/module/vk/fcitx-vk.conf.in
++++ b/src/module/vk/fcitx-vk.conf.in
+@@ -8,3 +8,4 @@
+ Type=SharedLibrary
+ Dependency=fcitx-x11
+ SubConfig=Virtual Key Board:native:data/vk.conf,fcitx:domain
++Priority=90

@@ -1,0 +1,12 @@
+usr/bin/fcitx
+usr/bin/fcitx-autostart
+usr/bin/fcitx-configtool
+usr/bin/fcitx-dbus-watcher
+usr/bin/fcitx-diagnose
+usr/bin/fcitx-po-parser
+usr/bin/fcitx-remote
+usr/bin/fcitx-scanner
+usr/bin/fcitx-skin-installer
+etc/xdg/autostart/fcitx-autostart.desktop
+usr/share/man/man1/fcitx.1
+usr/share/man/man1/fcitx-remote.1

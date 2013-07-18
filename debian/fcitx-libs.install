@@ -1,0 +1,3 @@
+usr/lib/*/libfcitx-config.so.*
+usr/lib/*/libfcitx-core.so.*
+usr/lib/*/libfcitx-utils.so.*

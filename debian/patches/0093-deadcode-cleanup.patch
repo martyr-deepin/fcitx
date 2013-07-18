@@ -1,0 +1,267 @@
+diff --git a/src/im/pinyin/py.c b/src/im/pinyin/py.c
+index 9e6900b..16f914d 100644
+--- a/src/im/pinyin/py.c
++++ b/src/im/pinyin/py.c
+@@ -1748,10 +1748,11 @@ void SavePYFreq(FcitxPinyinState *pystate)
+ 
+     fclose(fp);
+ 
+-    fp = FcitxXDGGetFileUserWithPrefix("pinyin", PY_FREQ_FILE, NULL, &pstr);
++    FcitxXDGGetFileUserWithPrefix("pinyin", PY_FREQ_FILE, NULL, &pstr);
+     if (access(pstr, 0))
+         unlink(pstr);
+     rename(tempfile, pstr);
++
+     free(pstr);
+     free(tempfile);
+     pystate->iNewFreqCount = 0;
+@@ -1821,7 +1822,7 @@ void SavePYIndex(FcitxPinyinState *pystate)
+ 
+     fclose(fp);
+ 
+-    fp = FcitxXDGGetFileUserWithPrefix("pinyin", PY_INDEX_FILE, NULL, &pstr);
++    FcitxXDGGetFileUserWithPrefix("pinyin", PY_INDEX_FILE, NULL, &pstr);
+     if (access(pstr, 0))
+         unlink(pstr);
+     rename(tempfile, pstr);
+diff --git a/src/im/pinyin/pyParser.c b/src/im/pinyin/pyParser.c
+index 99161b0..7121ae8 100644
+--- a/src/im/pinyin/pyParser.c
++++ b/src/im/pinyin/pyParser.c
+@@ -336,7 +336,7 @@ boolean MapPY(FcitxPinyinConfig* pyconfig, const char* strPYorigin, char strMap[
+ 
+     size_t          len = strlen(strPY);
+ 
+-    if (pyconfig->bMisstypeNGGN && strPY[len - 1] == 'n' && strPY[len - 2] == 'g') {
++    if (pyconfig->bMisstypeNGGN && len > 2 && strPY[len - 1] == 'n' && strPY[len - 2] == 'g') {
+         strPY[len - 2] = 'n';
+         strPY[len - 1] = 'g';
+     }
+diff --git a/src/im/table/tabledict.c b/src/im/table/tabledict.c
+index 592fbf8..3af65fe 100644
+--- a/src/im/table/tabledict.c
++++ b/src/im/table/tabledict.c
+@@ -237,12 +237,10 @@ table_load_error:
+         if (error) {
+             fcitx_memory_pool_destroy(tableDict->pool);
+             tableDict->pool = NULL;
+-            error = false;
+             reload++;
+-        }
+-        else
++        } else {
+             break;
+-
++        }
+     } while(reload < 2);
+ 
+     if (!tableDict->pool)
+diff --git a/src/lib/fcitx-utils/utf8.c b/src/lib/fcitx-utils/utf8.c
+index fb30748..4605b84 100644
+--- a/src/lib/fcitx-utils/utf8.c
++++ b/src/lib/fcitx-utils/utf8.c
+@@ -370,10 +370,9 @@ size_t fcitx_utf8_strnlen(const char* str, size_t byte)
+         if (byte < diff)
+             break;
+ 
+-        str += diff;
+         byte -= diff;
+         str = next;
+-        len ++ ;
++        len++;
+     }
+     return len;
+ }
+diff --git a/src/lib/fcitx/frontend.c b/src/lib/fcitx/frontend.c
+index 4d17d8e..5f81036 100644
+--- a/src/lib/fcitx/frontend.c
++++ b/src/lib/fcitx/frontend.c
+@@ -45,7 +45,8 @@ void FillICData(FcitxInstance* instance, FcitxInputContext* ic)
+     FcitxInputContext2* ic2 = (FcitxInputContext2*) ic;
+     unsigned int i = utarray_len(ic2->data);
+     for (;i < utarray_len(&instance->icdata);i++) {
+-        FcitxICDataInfo *info = (FcitxICDataInfo*)utarray_eltptr(&instance->icdata, i);
++        FcitxICDataInfo *info =
++            (FcitxICDataInfo*)_utarray_eltptr(&instance->icdata, i);
+         void *data = NULL;
+         if (info->allocCallback)
+             data = info->allocCallback(info->arg);
+@@ -66,8 +67,9 @@ void FreeICData(FcitxInstance* instance, FcitxInputContext* ic)
+     FcitxInputContext2* ic2 = (FcitxInputContext2*) ic;
+     unsigned int i = 0;
+     for (;i < utarray_len(ic2->data);i++) {
+-        void** data = (void**)utarray_eltptr(ic2->data, i);
+-        FcitxICDataInfo* info = (FcitxICDataInfo*)utarray_eltptr(&instance->icdata, i);
++        void** data = (void**)_utarray_eltptr(ic2->data, i);
++        FcitxICDataInfo* info =
++            (FcitxICDataInfo*)_utarray_eltptr(&instance->icdata, i);
+         if (info->freeCallback) {
+             info->freeCallback(info->arg, *data);
+         }
+diff --git a/src/module/chttrans/chttrans.c b/src/module/chttrans/chttrans.c
+index e40ce1f..73f9d6d 100644
+--- a/src/module/chttrans/chttrans.c
++++ b/src/module/chttrans/chttrans.c
+@@ -266,13 +266,11 @@ char *ConvertGBKSimple2Tradition(FcitxChttrans* transState, const char *strHZ)
+         FILE           *fp;
+         char           *ret;
+         int             i, len, ret_len;
+-        char           *strBuf = NULL;
+-        size_t          bufLen = 0;
+         const char     *ps;
+ 
+         if (!transState->s2t_table) {
+-            len = 0;
+-
++            char *strBuf = NULL;
++            size_t bufLen = 0;
+             fp = FcitxXDGGetFileWithPrefix("data", TABLE_GBKS2T, "r", NULL);
+             if (!fp) {
+                 ret = (char *) malloc(sizeof(char) * (strlen(strHZ) + 1));
+@@ -293,8 +291,7 @@ char *ConvertGBKSimple2Tradition(FcitxChttrans* transState, const char *strHZ)
+ 
+                 HASH_ADD_INT(transState->s2t_table, wc, s2t);
+             }
+-            if (strBuf)
+-                free(strBuf);
++            fcitx_utils_free(strBuf);
+         }
+ 
+         i = 0;
+@@ -366,13 +363,11 @@ char *ConvertGBKTradition2Simple(FcitxChttrans* transState, const char *strHZ)
+         FILE           *fp;
+         char           *ret;
+         int             i, len, ret_len;
+-        char           *strBuf = NULL;
+-        size_t          bufLen = 0;
+         const char     *ps;
+ 
+         if (!transState->t2s_table) {
+-            len = 0;
+-
++            char *strBuf = NULL;
++            size_t bufLen = 0;
+             fp = FcitxXDGGetFileWithPrefix("data", TABLE_GBKS2T, "r", NULL);
+             if (!fp) {
+                 ret = (char *) malloc(sizeof(char) * (strlen(strHZ) + 1));
+@@ -395,8 +390,7 @@ char *ConvertGBKTradition2Simple(FcitxChttrans* transState, const char *strHZ)
+ 
+                 HASH_ADD_INT(transState->t2s_table, wc, t2s);
+             }
+-            if (strBuf)
+-                free(strBuf);
++            fcitx_utils_free(strBuf);
+         }
+ 
+         i = 0;
+diff --git a/src/module/pinyin-enhance/pinyin-enhance-stroke.c b/src/module/pinyin-enhance/pinyin-enhance-stroke.c
+index f93bbf8..81a396b 100644
+--- a/src/module/pinyin-enhance/pinyin-enhance-stroke.c
++++ b/src/module/pinyin-enhance/pinyin-enhance-stroke.c
+@@ -247,7 +247,7 @@ py_enhance_stroke_get_match_keys(
+     for (i = 0;i < key_l;i++) {
+         key_buff[i] = py_enhance_stroke_sym_to_num(key_s[i]);
+         if (fcitx_unlikely(key_buff[i] == (uint8_t)-1)) {
+-            return 0;
++            goto out;
+         }
+     }
+     const PyEnhanceStrokeTree *tree = &pyenhance->stroke_tree;
+diff --git a/src/module/quickphrase/quickphrase.c b/src/module/quickphrase/quickphrase.c
+index fcf719b..345d4a3 100644
+--- a/src/module/quickphrase/quickphrase.c
++++ b/src/module/quickphrase/quickphrase.c
+@@ -568,12 +568,13 @@ QuickPhraseGetSpellHint(QuickPhraseState* qpstate)
+ INPUT_RETURN_VALUE QuickPhraseGetCandWords(QuickPhraseState* qpstate)
+ {
+     int iInputLen;
+-    QUICK_PHRASE searchKey, *pKey, *currentQuickPhrase, *lastQuickPhrase;
++    QUICK_PHRASE searchKey, *pKey, *currentQuickPhrase;
++    /* QUICK_PHRASE *lastQuickPhrase; */
+     FcitxInputState *input = FcitxInstanceGetInputState(qpstate->owner);
+     FcitxCandidateWordList *candList = FcitxInputStateGetCandidateList(input);
+     FcitxInstance *instance = qpstate->owner;
+     FcitxGlobalConfig* config = FcitxInstanceGetGlobalConfig(instance);
+-    int iLastQuickPhrase;
++    /* int iLastQuickPhrase; */
+     int iFirstQuickPhrase;
+     FcitxInstanceCleanInputWindowDown(qpstate->owner);
+     FcitxCandidateWordSetPageSize(candList, config->iMaxCandWord);
+@@ -597,10 +598,12 @@ INPUT_RETURN_VALUE QuickPhraseGetCandWords(QuickPhraseState* qpstate)
+ 
+         currentQuickPhrase = utarray_custom_bsearch(pKey, qpstate->quickPhrases, false, PhraseCmp);
+         iFirstQuickPhrase = utarray_eltidx(qpstate->quickPhrases, currentQuickPhrase);
+-        lastQuickPhrase = utarray_custom_bsearch(pKey, qpstate->quickPhrases, false, PhraseCmpA);
+-        iLastQuickPhrase = utarray_eltidx(qpstate->quickPhrases, lastQuickPhrase);
+-        if (iLastQuickPhrase < 0)
+-            iLastQuickPhrase = utarray_len(qpstate->quickPhrases);
++        /* lastQuickPhrase = utarray_custom_bsearch(pKey, qpstate->quickPhrases, */
++        /*                                          false, PhraseCmpA); */
++        /* iLastQuickPhrase = utarray_eltidx(qpstate->quickPhrases, */
++        /*                                   lastQuickPhrase); */
++        /* if (iLastQuickPhrase < 0) */
++        /*     iLastQuickPhrase = utarray_len(qpstate->quickPhrases); */
+         if (!currentQuickPhrase || strncmp(qpstate->buffer, currentQuickPhrase->strCode, iInputLen)) {
+             break;
+         }
+diff --git a/src/module/spell/dict/comp_spell_dict.c b/src/module/spell/dict/comp_spell_dict.c
+index a7fca63..f156cf3 100644
+--- a/src/module/spell/dict/comp_spell_dict.c
++++ b/src/module/spell/dict/comp_spell_dict.c
+@@ -59,12 +59,7 @@ compile_dict(int ifd, int ofd)
+         ceff_buff = htole16(ceff > UINT16_MAX ? UINT16_MAX : ceff);
+         write(ofd, &ceff_buff, sizeof(uint16_t));
+         start = ++p;
+-        char* temp = p;
+-        temp = strchr(p, '\n');
+-        if (temp)
+-            p = temp;
+-        else
+-            p = p + strlen(p);
++        p += strcspn(p, "\n");
+         write(ofd, start, p - start);
+         write(ofd, &null_byte, 1);
+         wcount++;
+diff --git a/src/ui/classic/skin.c b/src/ui/classic/skin.c
+index 3679542..fec0da3 100644
+--- a/src/ui/classic/skin.c
++++ b/src/ui/classic/skin.c
+@@ -520,9 +520,10 @@ void DrawResizableBackground(cairo_t *c,
+ 
+ void DestroyImage(cairo_surface_t ** png)
+ {
+-    if (png != NULL)
++    if (png != NULL) {
+         cairo_surface_destroy(*png);
+-    *png = NULL;
++        *png = NULL;
++    }
+ }
+ 
+ /**
+diff --git a/tools/cli/createPYMB.c b/tools/cli/createPYMB.c
+index cf37212..3dc04d4 100644
+--- a/tools/cli/createPYMB.c
++++ b/tools/cli/createPYMB.c
+@@ -396,8 +396,6 @@ void CreatePYBase(void)
+         t = t->next;
+     }
+ 
+-    s += iCount;
+-
+     fclose(fp1);
+     fclose(fps);
+ }
+diff --git a/tools/cli/pyTools.c b/tools/cli/pyTools.c
+index 31e03ee..2d3162a 100644
+--- a/tools/cli/pyTools.c
++++ b/tools/cli/pyTools.c
+@@ -73,7 +73,7 @@ void LoadPYMB(FILE *fi, struct _PYMB **pPYMB, int isUser)
+     *pPYMB = PYMB = malloc(sizeof(*PYMB) * (n + 1));
+ 
+     for (i = 0; i < n; ++i) {
+-        r = fcitx_utils_read_int32(fi, &(PYMB[i].PYFAIndex));
++        fcitx_utils_read_int32(fi, &(PYMB[i].PYFAIndex));
+ 
+         int8_t clen;
+         fread(&clen, sizeof(int8_t), 1, fi);

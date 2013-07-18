@@ -1,0 +1,22 @@
+[X Keyboard/OverrideSystemXKBSettings]
+Type=Boolean
+DefaultValue=True
+Description=Allow to Override System XKB Settings
+
+[X Keyboard/IgnoreInputMethodLayoutRequest]
+Type=Boolean
+DefaultValue=False
+Description=Ignore Input Method Layout Request
+
+[X Keyboard/XModmapCommand]
+Type=String
+DefaultValue=xmodmap
+Description=xmodmap command
+
+[X Keyboard/CustomXModmapScript]
+Type=File
+DefaultValue=
+Description=Apply this custom xmodmap script after layout change
+
+[DescriptionFile]
+LocaleDomain=fcitx
