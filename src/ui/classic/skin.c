@@ -998,12 +998,15 @@ SkinImage* GetIMIcon(FcitxClassicUI* classicui, FcitxSkin *sc, const char* fallb
         return NULL;
     const char *path;
     char *tmpstr = NULL;
-    if (im->strIconName[0] == '/') {
+    if (flag != 2 && strncmp(im->uniqueName, "sogou-pinyin", strlen("sogou-pinyin")) == 0) {
+        path = "logo-sogou.png";
+    } else if (im->strIconName[0] == '/') {
         path = im->strIconName;
     } else {
         fcitx_utils_alloc_cat_str(tmpstr, im->strIconName, ".png");
         path = tmpstr;
     }
+
     SkinImage *imicon = NULL;
     if (strncmp(im->uniqueName, "fcitx-keyboard-",
                 strlen("fcitx-keyboard-")) == 0) {
