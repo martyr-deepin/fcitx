@@ -42,24 +42,14 @@
 
 #define VK_FILE "vk.conf"
 
-#define VK_WINDOW_WIDTH     354
-#define VK_WINDOW_HEIGHT    164
+/*#define VK_WINDOW_WIDTH     354*/
+/*#define VK_WINDOW_HEIGHT    164*/
+#define VK_WINDOW_WIDTH     783
+#define VK_WINDOW_HEIGHT    309
 #define VK_NUMBERS      47
 #define VK_MAX          50
 
-const char* dummyTranslate[] = {
-    N_("Latin"),
-    N_("Fullwidth"),
-    N_("Greek"),
-    N_("Russian"),
-    N_("Index"),
-    N_("Math"),
-    N_("Number"),
-    N_("Special"),
-    N_("Hiragana"),
-    N_("Katakana"),
-    N_("Table Symbol")
-};
+static int get_click_region(int x, int y);
 
 struct _FcitxVKState;
 
@@ -104,9 +94,6 @@ static Visual * VKFindARGBVisual(FcitxVKState* vkstate);
 static void VKSetWindowProperty(FcitxVKState* vkstate, Window window, FcitxXWindowType type, char *windowTitle);
 static boolean VKMouseClick(FcitxVKState* vkstate, Window window, int *x, int *y);
 static void SwitchVK(FcitxVKState *vkstate);
-static void LoadVKMapFile(FcitxVKState *vkstate);
-static void ChangVK(FcitxVKState* vkstate);
-static void ReloadVK(void *arg);
 static int MyToUpper(int iChar);
 static int MyToLower(int iChar);
 static cairo_surface_t* LoadVKImage(VKWindow* vkWindow);
@@ -122,12 +109,14 @@ static boolean VKPreFilter(void* arg, FcitxKeySym sym,
                            INPUT_RETURN_VALUE *retval
                           );
 static  void VKReset(void* arg);
-static void VKUpdate(void* arg);
+static void VKUpdate1(void* arg);
+static void VKUpdate2(void* arg);
 static INPUT_RETURN_VALUE DoVKInput(FcitxVKState* vkstate, KeySym sym, int state);
 static void DisplayVKWindow(VKWindow* vkWindow);
 static boolean VKMenuAction(FcitxUIMenu *menu, int index);
 static void UpdateVKMenu(FcitxUIMenu *menu);
 static void SelectVK(FcitxVKState* vkstate, int vkidx);
+static void set_struct_partial(Display* display, Window window, guint32 strut, guint32 strut_start, guint32 strut_end);
 
 static FcitxConfigColor blackColor = {0, 0, 0};
 
@@ -136,7 +125,7 @@ FCITX_DEFINE_PLUGIN(fcitx_vk, module, FcitxModule) = {
     NULL,
     NULL,
     NULL,
-    ReloadVK
+    NULL,
 };
 
 void *VKCreate(FcitxInstance* instance)
@@ -152,13 +141,12 @@ void *VKCreate(FcitxInstance* instance)
     FcitxInstanceRegisterHotkeyFilter(instance, hotkey);
 
     FcitxUIRegisterStatus(instance, vkstate, "vk", _("Toggle Virtual Keyboard"), _("Virtual Keyboard State"),  ToggleVKState, GetVKState);
+    printf("regist status icon\n");
 
-    LoadVKMapFile(vkstate);
-
-    FcitxKeyFilterHook hk;
-    hk.arg = vkstate ;
-    hk.func = VKPreFilter;
-    FcitxInstanceRegisterPreInputFilter(instance, hk);
+    /*FcitxKeyFilterHook hk;*/
+    /*hk.arg = vkstate ;*/
+    /*hk.func = VKPreFilter;*/
+    /*FcitxInstanceRegisterPreInputFilter(instance, hk);*/
 
     FcitxIMEventHook resethk;
     resethk.arg = vkstate;
@@ -166,20 +154,21 @@ void *VKCreate(FcitxInstance* instance)
     FcitxInstanceRegisterTriggerOnHook(instance, resethk);
     FcitxInstanceRegisterTriggerOffHook(instance, resethk);
 
-    resethk.func = VKUpdate;
+    resethk.func = VKUpdate1;
     FcitxInstanceRegisterInputFocusHook(instance, resethk);
+    resethk.func = VKUpdate2;
     FcitxInstanceRegisterInputUnFocusHook(instance, resethk);
 
-    FcitxMenuInit(&vkstate->vkmenu);
-    vkstate->vkmenu.candStatusBind = strdup("vk");
-    vkstate->vkmenu.name = strdup(_("Virtual Keyboard"));
+    /*FcitxMenuInit(&vkstate->vkmenu);*/
+    /*vkstate->vkmenu.candStatusBind = strdup("vk");*/
+    /*vkstate->vkmenu.name = strdup(_("Virtual Keyboard"));*/
 
-    vkstate->vkmenu.UpdateMenu = UpdateVKMenu;
-    vkstate->vkmenu.MenuAction = VKMenuAction;
-    vkstate->vkmenu.priv = vkstate;
-    vkstate->vkmenu.isSubMenu = false;
+    /*vkstate->vkmenu.UpdateMenu = UpdateVKMenu;*/
+    /*vkstate->vkmenu.MenuAction = VKMenuAction;*/
+    /*vkstate->vkmenu.priv = vkstate;*/
+    /*vkstate->vkmenu.isSubMenu = false;*/
 
-    FcitxUIRegisterMenu(instance, &vkstate->vkmenu);
+    /*FcitxUIRegisterMenu(instance, &vkstate->vkmenu);*/
 
     return vkstate;
 }
@@ -212,6 +201,7 @@ void UpdateVKMenu(FcitxUIMenu *menu)
 
 void VKReset(void* arg)
 {
+    printf("trigger on\n");
     FcitxVKState *vkstate = (FcitxVKState*) arg;
     VKWindow* vkWindow = vkstate->vkWindow;
     if (vkstate->bVK != false)
@@ -220,8 +210,20 @@ void VKReset(void* arg)
         XUnmapWindow(vkWindow->dpy, vkWindow->window);
 }
 
-void VKUpdate(void* arg)
+void VKUpdate2(void* arg)
 {
+    printf("trigger input unfocus\n");
+    FcitxVKState *vkstate = (FcitxVKState*) arg;
+    VKWindow* vkWindow = vkstate->vkWindow;
+    if (vkWindow) {
+        XUnmapWindow(vkWindow->dpy, vkWindow->window);
+        /*FcitxInstanceCleanInputWindow(instance);*/
+        /*FcitxUIUpdateInputWindow(instance);*/
+    }
+}
+void VKUpdate1(void* arg)
+{
+    printf("trigger input focus\n");
     FcitxVKState *vkstate = (FcitxVKState*) arg;
     VKWindow* vkWindow = vkstate->vkWindow;
     if (vkWindow) {
@@ -255,6 +257,7 @@ void ToggleVKState(void *arg)
 {
     FcitxVKState *vkstate = (FcitxVKState*) arg;
     SwitchVK(vkstate);
+    printf("switch vk \n");
 }
 
 INPUT_RETURN_VALUE ToggleVKStateWithHotkey(void* arg)
@@ -338,10 +341,18 @@ cairo_surface_t* LoadVKImage(VKWindow* vkWindow)
 {
     FcitxVKState* vkstate = vkWindow->owner;
     boolean fallback = true;
-    char vkimage[] = "keyboard.png";
+    char *vkimage = "keyboard.png";
+    if (vkstate->bShiftPressed) {
+        vkimage = "keyboard-shift.png";
+    } else if (vkstate->bVKCaps) {
+        vkimage = "keyboard-caps.png";
+    }
+    if (vkWindow->keyboard) {
+        cairo_surface_destroy(vkWindow->keyboard);
+    }
+
     cairo_surface_t *image = FcitxClassicUILoadImage(vkstate->owner,
                                                      vkimage, &fallback);
-
     if (image)
         return image;
 
@@ -364,6 +375,25 @@ void DestroyVKWindow(VKWindow* vkWindow)
     XDestroyWindow(vkWindow->dpy, vkWindow->window);
 }
 
+static
+void draw_input_method_button(FcitxVKState* vkstate, cairo_t* cr)
+{
+    char* path = "touch_cn.png";
+    FcitxInstance* instance = vkstate->owner;
+    FcitxIM* im = FcitxInstanceGetCurrentIM(instance);
+    if (im && strncmp(im->uniqueName, "fcitx-keyboard-cn", 17) != 0) { //Chinese input method
+        path = "touch_en.png";
+    }
+    int fallback = false;
+    cairo_surface_t *button = FcitxClassicUILoadImage(instance, path, &fallback);
+    /*printf("draw button begin: %d\n", cairo_surface_get_reference_count(button));*/
+    cairo_set_source_surface(cr, button, 683, 168);
+    cairo_paint(cr);
+    /*printf("draw button after: %d\n", cairo_surface_get_reference_count(button));*/
+    /*cairo_surface_destroy(button);*/
+    //TODO : why can't destroy surface button
+}
+
 void DrawVKWindow(VKWindow* vkWindow)
 {
     int i;
@@ -382,42 +412,16 @@ void DrawVKWindow(VKWindow* vkWindow)
     }
 
     cr = cairo_create(vkWindow->surface);
+    cairo_save(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(cr);
+    cairo_restore(cr);
     cairo_surface_t* vkimage = LoadVKImage(vkWindow);
     cairo_set_source_surface(cr, vkimage, 0, 0);
     cairo_paint(cr);
-    /* 显示字符 */
-    /* 名称 */
-    OutputString(cr, vks[vkstate->iCurrentVK].strName, *font, vkWindow->fontSize, false , (VK_WINDOW_WIDTH - StringWidth(vks[vkstate->iCurrentVK].strName, *font, vkWindow->fontSize, false)) / 2, 6, fontColor);
+    cairo_surface_flush(vkWindow->surface);
 
-    /* 第一排 */
-    iPos = 13;
-    for (i = 0; i < 13; i++) {
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][1], *font, vkWindow->fontSize, false, iPos, 27, fontColor);
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][0], *font, vkWindow->fontSize, false, iPos - 5, 40, fontColor);
-        iPos += 24;
-    }
-    /* 第二排 */
-    iPos = 48;
-    for (i = 13; i < 26; i++) {
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][1], *font, vkWindow->fontSize, false, iPos, 55, fontColor);
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][0], *font, vkWindow->fontSize, false, iPos - 5, 68, fontColor);
-        iPos += 24;
-    }
-    /* 第三排 */
-    iPos = 55;
-    for (i = 26; i < 37; i++) {
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][1], *font, vkWindow->fontSize, false, iPos, 83, fontColor);
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][0], *font, vkWindow->fontSize, false, iPos - 5, 96, fontColor);
-        iPos += 24;
-    }
-
-    /* 第四排 */
-    iPos = 72;
-    for (i = 37; i < 47; i++) {
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][1], *font, vkWindow->fontSize, false, iPos, 111, fontColor);
-        OutputString(cr, vks[vkstate->iCurrentVK].strSymbol[i][0], *font, vkWindow->fontSize, false, iPos - 5, 124, fontColor);
-        iPos += 24;
-    }
+    draw_input_method_button(vkstate, cr);
 
     cairo_destroy(cr);
     cairo_surface_flush(vkWindow->surface);
@@ -428,197 +432,93 @@ void DrawVKWindow(VKWindow* vkWindow)
  */
 boolean VKMouseKey(FcitxVKState* vkstate, int x, int y)
 {
-    int             iIndex = 0;
-    char            strKey[3] = { 0, 0, 0};
-    char           *pstr = NULL;
+    int r = get_click_region(x, y);
+    if (r == -1)
+        return true;
+    static char keys[] = {
+        '`', '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=',
+        'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\\',
+        'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'',
+        'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/',
+
+        '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '+',
+        'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P', '{', '}', '|',
+        'A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L', ':', '"',
+        'Z', 'X', 'C', 'V', 'B', 'N', 'M', '<', '>', '?',
+    };
     FcitxInstance* instance = vkstate->owner;
+    if (FcitxInstanceGetCurrentIC(instance) == NULL)
+        return false;
 
-    if (FcitxUIIsInBox(x, y, 1, 1, VK_WINDOW_WIDTH, 16))
-        ChangVK(vkstate);
-    else {
-        if (FcitxInstanceGetCurrentIC(instance) == NULL)
-            return false;
+    if (r < 47) {
+        char pstr[] = {0, 0};
+        switch (r) {
+            case 13: case 14: case 15: case 16: case 17: case 18: case 19: case 20: case 21: case 22:
+            case 26: case 27: case 28: case 29: case 30: case 31: case 32: case 33: case 34:
+            case 37: case 38: case 39: case 40: case 41: case 42: case 43:
+                pstr[0] = keys[r + ((vkstate->bVKCaps ^ vkstate->bShiftPressed) ? 47 : 0)];
+                break;
+            default:
+                pstr[0] =  keys[r + ((vkstate->bShiftPressed) ? 47 : 0)];
+                break;
+        }
+        printf("commit: %c, shift:%d, cpas: %d\n", pstr[0], vkstate->bShiftPressed, vkstate->bVKCaps);
 
-        strKey[1] = '\0';
-        pstr = strKey;
-        if (y >= 28 && y <= 55) {   //第一行
-            if (x < 4 || x > 348)
-                return false;
-
-            x -= 4;
-            if (x >= 313 && x <= 344) { //backspace
-                FcitxInstanceForwardKey(instance, FcitxInstanceGetCurrentIC(instance), FCITX_PRESS_KEY, FcitxKey_BackSpace, 0);
+        FcitxKeySym sym;
+        unsigned int state=0;
+        FcitxHotkeyParseKey(pstr, &sym, &state);
+        process_click(vkstate, sym, false);
+    } else {
+        switch (r) {
+            case 47: 
+                process_click(vkstate, FcitxKey_BackSpace, true);
                 return true;
-            } else {
-                iIndex = x / 24;
-                if (iIndex > 12)    //避免出现错误
-                    iIndex = 12;
-                pstr = vkstate->vks[vkstate->iCurrentVK].strSymbol[iIndex][vkstate->bShiftPressed ^ vkstate->bVKCaps];
-                if (vkstate->bShiftPressed) {
-                    vkstate->bShiftPressed = false;
-                    DrawVKWindow(vkstate->vkWindow);
-                }
-            }
-        } else if (y >= 56 && y <= 83) { //第二行
-            if (x < 4 || x > 350)
-                return false;
-
-            if (x >= 4 && x < 38) { //Tab
-                FcitxInstanceForwardKey(instance, FcitxInstanceGetCurrentIC(instance), FCITX_PRESS_KEY, FcitxKey_Tab, 0);
+            case 48:
+                process_click(vkstate, FcitxKey_Tab, true);
                 return true;
-            } else {
-                iIndex = 13 + (x - 38) / 24;
-                pstr = vkstate->vks[vkstate->iCurrentVK].strSymbol[iIndex][vkstate->bShiftPressed ^ vkstate->bVKCaps];
-                if (vkstate->bShiftPressed) {
-                    vkstate->bShiftPressed = false;
-                    DrawVKWindow(vkstate->vkWindow);
-                }
-            }
-        } else if (y >= 84 && y <= 111) { //第三行
-            if (x < 4 || x > 350)
-                return false;
-
-            if (x >= 4 && x < 44) { //Caps
-                //改变大写键状态
+            case 49:
                 vkstate->bVKCaps = !vkstate->bVKCaps;
-                pstr = (char *) NULL;
+                vkstate->bShiftPressed = false;
                 DrawVKWindow(vkstate->vkWindow);
-            } else if (x > 308 && x <= 350) //Return
-                strKey[0] = '\n';
-            else {
-                iIndex = 26 + (x - 44) / 24;
-                pstr = vkstate->vks[vkstate->iCurrentVK].strSymbol[iIndex][vkstate->bShiftPressed ^ vkstate->bVKCaps];
-                if (vkstate->bShiftPressed) {
-                    vkstate->bShiftPressed = false;
-                    DrawVKWindow(vkstate->vkWindow);
-                }
-            }
-        } else if (y >= 112 && y <= 139) {  //第四行
-            if (x < 4 || x > 302)
-                return false;
-
-            if (x >= 4 && x < 62) { //SHIFT
-                //改变SHIFT键状态
-                vkstate->bShiftPressed = !vkstate->bShiftPressed;
-                pstr = (char *) NULL;
-                DrawVKWindow(vkstate->vkWindow);
-            } else {
-                iIndex = 37 + (x - 62) / 24;
-                pstr = vkstate->vks[vkstate->iCurrentVK].strSymbol[iIndex][vkstate->bShiftPressed ^ vkstate->bVKCaps];
-                if (vkstate->bShiftPressed) {
-                    vkstate->bShiftPressed = false;
-                    DrawVKWindow(vkstate->vkWindow);
-                }
-            }
-        } else if (y >= 140 && y <= 162) {  //第五行
-            if (x >= 4 && x < 38) { //Ins
-                //改变INS键状态
-                FcitxInstanceForwardKey(instance, FcitxInstanceGetCurrentIC(instance), FCITX_PRESS_KEY, FcitxKey_Insert, 0);
                 return true;
-            } else if (x >= 61 && x < 98) { //DEL
-                FcitxInstanceForwardKey(instance, FcitxInstanceGetCurrentIC(instance), FCITX_PRESS_KEY, FcitxKey_Delete, 0);
+            case 50:
+                {
+                    process_click(vkstate, FcitxKey_Return, true);
+                    return true;
+                }
+            case 51:
+                {
+                    //shift;
+                    vkstate->bShiftPressed = !vkstate->bShiftPressed;
+                    vkstate->bVKCaps = false;
+                    DrawVKWindow(vkstate->vkWindow);
+                    return true;
+                }
+            case 52:
+                {
+                    FcitxInputContext* ic = FcitxInstanceGetCurrentIC(instance);
+                    FcitxInstanceChangeIMState(instance, ic);
+                    DrawVKWindow(vkstate->vkWindow);
+                    return true;
+                }
+            case 53: //ins
+                process_click(vkstate, FcitxKey_Insert, true);
                 return true;
-            } else if (x >= 99 && x < 270)  //空格
-                strcpy(strKey, " ");
-            else if (x >= 312 && x <= 350) {    //ESC
-                SwitchVK(vkstate);
-                pstr = (char *) NULL;
-            } else
-                return false;
-        }
-
-        if (pstr) {
-            FcitxInstanceCommitString(instance, FcitxInstanceGetCurrentIC(instance), pstr);
+            case 54: //del
+                process_click(vkstate, FcitxKey_Delete, true);
+                return true;
+            case 55: //space
+                {
+                    /*strcpy(strKey, " ");*/
+                }
+            case 56: //esc
+                {
+                    /*SwitchVK(vkstate);*/
+                    /*pstr = (char *) NULL;*/
+                }
         }
     }
-
     return true;
-}
-
-/*
- * 读取虚拟键盘映射文件
- */
-void LoadVKMapFile(FcitxVKState *vkstate)
-{
-    int             i, j;
-    FILE           *fp;
-    char           *buf = NULL;
-    char           *pstr;
-    VKS*            vks = vkstate->vks;
-    size_t          len;
-
-    for (j = 0; j < VK_MAX; j++) {
-        for (i = 0; i < VK_NUMBERS; i++) {
-            vks[j].strSymbol[i][0][0] = '\0';
-            vks[j].strSymbol[i][1][0] = '\0';
-        }
-        if (vks[j].strName) {
-            free(vks[j].strName);
-            vks[j].strName = NULL;
-        }
-    }
-
-    fp = FcitxXDGGetFileWithPrefix("data", VK_FILE, "r", NULL);
-
-    if (!fp)
-        return;
-
-    vkstate->iVKCount = 0;
-
-    while (getline(&buf, &len, fp) != -1) {
-        pstr = buf;
-        while (*pstr == ' ' || *pstr == '\t')
-            pstr++;
-        if (pstr[0] == '#')
-            continue;
-
-        i = strlen(pstr) - 1;
-        if (pstr[i] == '\n')
-            pstr[i] = '\0';
-        if (!strlen(pstr))
-            continue;
-
-        if (!strcmp(pstr, "[VK]"))
-            vkstate->iVKCount++;
-        else if (!strncmp(pstr, "NAME=", 5))
-            vks[vkstate->iVKCount - 1].strName = strdup(gettext(pstr + 5));
-        else {
-            if (pstr[1] != '=' && !vkstate->iVKCount)
-                continue;
-
-            for (i = 0; i < VK_NUMBERS; i++) {
-                if (vkTable[i] == tolower(pstr[0])) {
-                    pstr += 2;
-                    while (*pstr == ' ' || *pstr == '\t')
-                        pstr++;
-
-                    if (!(*pstr))
-                        break;
-
-                    j = 0;
-                    while (*pstr && (*pstr != ' ' && *pstr != '\t'))
-                        vks[vkstate->iVKCount - 1].strSymbol[i][0][j++] = *pstr++;
-                    vks[vkstate->iVKCount - 1].strSymbol[i][0][j] = '\0';
-
-                    j = 0;
-                    while (*pstr == ' ' || *pstr == '\t')
-                        pstr++;
-                    if (*pstr) {
-                        while (*pstr && (*pstr != ' ' && *pstr != '\t'))
-                            vks[vkstate->iVKCount - 1].strSymbol[i][1][j++] = *pstr++;
-                        vks[vkstate->iVKCount - 1].strSymbol[i][1][j] = '\0';
-                    }
-
-                    break;
-                }
-            }
-        }
-    }
-
-    if (buf)
-        free(buf);
-
-    fclose(fp);
 }
 
 /*
@@ -671,17 +571,6 @@ int MyToLower(int iChar)
     return tolower(iChar);
 }
 
-void ChangVK(FcitxVKState* vkstate)
-{
-    vkstate->iCurrentVK++;
-    if (vkstate->iCurrentVK == vkstate->iVKCount)
-        vkstate->iCurrentVK = 0;
-
-    vkstate->bVKCaps = false;
-    vkstate->bShiftPressed = false;
-
-    DrawVKWindow(vkstate->vkWindow);
-}
 
 INPUT_RETURN_VALUE DoVKInput(FcitxVKState* vkstate, KeySym sym, int state)
 {
@@ -704,11 +593,13 @@ void SwitchVK(FcitxVKState *vkstate)
     if (vkstate->vkWindow == NULL)
         vkstate->vkWindow = CreateVKWindow(vkstate);
     VKWindow *vkWindow = vkstate->vkWindow;
-    if (!vkstate->iVKCount)
-        return;
+    /*if (!vkstate->iVKCount)*/
+        /*return;*/
 
     vkstate->bVK = !vkstate->bVK;
+    printf("huhuhuhuhu\n");
 
+    /*if (true) {*/
     if (vkstate->bVK) {
         int             x, y;
         int dwidth, dheight;
@@ -732,8 +623,14 @@ void SwitchVK(FcitxVKState *vkstate)
         if (x < 0)
             x = 0;
 
-
+        x = (dwidth - VK_WINDOW_WIDTH) / 2;
+        y = dheight - VK_WINDOW_HEIGHT - 45;
         XMoveWindow(vkWindow->dpy, vkWindow->window, x, y);
+        set_struct_partial(vkWindow->dpy, vkWindow->window, 
+                dheight - y,
+                x,
+                x + VK_WINDOW_WIDTH);
+
         DisplayVKWindow(vkWindow);
         FcitxUICloseInputWindow(instance);
 
@@ -787,10 +684,151 @@ VKMouseClick(FcitxVKState* vkstate, Window window, int *x, int *y)
     return bMoved;
 }
 
-void ReloadVK(void* arg)
+
+void process_click(FcitxVKState* vkstate, FcitxKeySym sym, int special)
 {
-    FcitxVKState* vkstate = (FcitxVKState*)arg;
-    LoadVKMapFile(vkstate);
+    FcitxInstance* instance = vkstate->owner;
+    FcitxIM* im = FcitxInstanceGetCurrentIM(instance);
+    if (im && strncmp(im->uniqueName, "fcitx-keyboard-cn", 17) != 0) { //Chinese input method
+        printf("in Chinese input method\n");
+        FcitxInstanceProcessKey(instance, FCITX_PRESS_KEY, 0, sym, 0);
+    } else {
+        printf("in English input method\n");
+        if (special) {
+            FcitxInstanceForwardKey(instance, FcitxInstanceGetCurrentIC(instance), FCITX_PRESS_KEY, sym, 0);
+        } else {
+            char* pstr = FcitxHotkeyGetKeyString(sym, 0);
+            FcitxInstanceCommitString(instance, FcitxInstanceGetCurrentIC(instance), pstr);
+            free(pstr);
+        }
+    }
+}
+
+static
+int get_click_region(int x, int y)
+{
+#define BUILD_RECT(_x, _y) \
+    rects[_count_].x = _x; \
+    rects[_count_].y = _y; \
+    rects[_count_].width = 45; \
+    rects[_count_++].height = 42;
+
+#define BUILD_SPECIAL(_x, _y, _w, _h) \
+    rects[_count_].x = _x; \
+    rects[_count_].y = _y; \
+    rects[_count_].width = _w; \
+    rects[_count_++].height = _h;
+
+    static int _init = FALSE;
+    static cairo_rectangle_int_t rects[47+10];
+    if (!_init) {
+        int _count_ = 0;
+        BUILD_RECT(14, 15);          // ~
+        BUILD_RECT(66, 15);          // 1
+        BUILD_RECT(120, 15);         // 2
+        BUILD_RECT(172, 15);         // 3
+        BUILD_RECT(225, 15);         // 4
+        BUILD_RECT(278, 15);         // 5
+        BUILD_RECT(331, 15);         // 6
+        BUILD_RECT(383, 15);         // 7
+        BUILD_RECT(437, 15);         // 8
+        BUILD_RECT(489, 15);         // 9
+        BUILD_RECT(542, 15);        // 0
+        BUILD_RECT(595, 15);        // -
+        BUILD_RECT(648, 15);        // =
+
+        BUILD_RECT(90, 66);             // q
+        BUILD_RECT(143, 66);             // w
+        BUILD_RECT(196, 66);             // e
+        BUILD_RECT(249, 66);             // r
+        BUILD_RECT(301, 66);             // t
+        BUILD_RECT(356, 66);             // y
+        BUILD_RECT(407, 66);             // u
+        BUILD_RECT(460, 66);             // i
+        BUILD_RECT(513, 66);             // o
+        BUILD_RECT(566, 66);             // p
+        BUILD_RECT(618, 66);             // [
+        BUILD_RECT(672, 66);             // ]
+        BUILD_RECT(725, 66);             // |
+
+        BUILD_RECT(109, 116);             // a
+        BUILD_RECT(161, 116);             // s
+        BUILD_RECT(214, 116);             // d
+        BUILD_RECT(265, 116);             // f
+        BUILD_RECT(316, 116);             // g
+        BUILD_RECT(369, 116);             // h
+        BUILD_RECT(420, 116);             // j
+        BUILD_RECT(472, 116);             // k
+        BUILD_RECT(522, 116);             // l
+        BUILD_RECT(576, 116);             // ;
+        BUILD_RECT(626, 116);             // '
+
+        BUILD_RECT(136, 169);             // z
+        BUILD_RECT(187, 169);             // x
+        BUILD_RECT(240, 169);             // c
+        BUILD_RECT(291, 169);             // v
+        BUILD_RECT(342, 169);             // b
+        BUILD_RECT(394, 169);             // n
+        BUILD_RECT(446, 169);             // m
+        BUILD_RECT(497, 169);             // ,
+        BUILD_RECT(548, 169);             // .
+        BUILD_RECT(601, 169);             // /
+
+        BUILD_SPECIAL(698, 15, 71, 42);   //backspace
+
+        BUILD_SPECIAL(14, 66, 71, 42);    //Tab
+
+        BUILD_SPECIAL(14, 116, 89, 42);    //CapsLock
+        BUILD_SPECIAL(680, 116, 89, 42);    //Enter
+
+        BUILD_SPECIAL(15, 168, 110, 42);    //Shift
+        BUILD_SPECIAL(683, 168, 115, 51);    // IMChange
+
+        BUILD_SPECIAL(14, 221, 88, 51);    //Insert
+        BUILD_SPECIAL(137, 221, 89, 51);    //Delete
+        BUILD_SPECIAL(234, 221, 365, 52);    //Space
+        BUILD_SPECIAL(654, 221, 115, 51);    //Esc
+
+        _init = TRUE;
+    }
+    int i=0;
+    for (; i < 47+10; i++) {
+        /*printf("checek (%d,%d)  wehter in %d(%d,%d,%d,%d)\n", x, y, i, rects[i].x, rects[i].y, rects[i].width, rects[i].height);*/
+        if (FcitxUIIsInBox(x, y, rects[i].x, rects[i].y, rects[i].width, rects[i].height))
+            return i;
+    }
+    return -1;
+}
+
+void set_struct_partial(Display* display, Window window, guint32 strut, guint32 strut_start, guint32 strut_end)
+{
+    gulong   struts [12] = { 0, };
+
+    static Atom net_wm_strut_partial = None;
+    if (net_wm_strut_partial == None)
+        net_wm_strut_partial = XInternAtom (display, "_NET_WM_STRUT_PARTIAL", False);
+
+    enum {
+        STRUT_LEFT = 0,
+        STRUT_RIGHT = 1,
+        STRUT_TOP = 2,
+        STRUT_BOTTOM = 3,
+        STRUT_LEFT_START = 4,
+        STRUT_LEFT_END = 5,
+        STRUT_RIGHT_START = 6,
+        STRUT_RIGHT_END = 7,
+        STRUT_TOP_START = 8,
+        STRUT_TOP_END = 9,
+        STRUT_BOTTOM_START = 10,
+        STRUT_BOTTOM_END = 11
+    };
+    struts [STRUT_BOTTOM] = strut;
+    struts [STRUT_BOTTOM_START] = strut_start;
+    struts [STRUT_BOTTOM_END] = strut_end;
+
+    XChangeProperty (display, window, net_wm_strut_partial,
+            XA_CARDINAL, 32, PropModeReplace,
+            (guchar *) &struts, 12);
 }
 
 
